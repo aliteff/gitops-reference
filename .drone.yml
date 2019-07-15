@@ -1,0 +1,54 @@
+kind: pipeline
+name: example
+
+workspace:
+  base: /go
+  path: src/github.com/kminehart/gitops-reference
+
+steps:
+- name: build
+  image: golang:1.12
+  commands:
+  - go build
+- name: test
+  image: golang:1.12
+  commands:
+  - go test
+- name: docker_tags
+  image: alpine/git
+  commands:
+  # use the tag. If not set, use the commit ref
+  - VERSION=${DRONE_TAG:=$DRONE_COMMIT}
+  - echo "$VERSION,$VERSION-$DRONE_BUILD_NUMBER-$DRONE_REPO_BRANCH,$DRONE_REPO_BRANCH,latest" > .tags
+  when:
+    ref:
+      include:
+      - refs/tags/*
+      - refs/heads/master
+- name: docker
+  image: plugins/docker
+  settings:
+    repo: kminehart/gitops-reference
+    username:
+      from_secret: docker_username
+    password:
+      from_secret: docker_password
+  when:
+    ref:
+      include:
+      - refs/tags/*
+      - refs/heads/master
+- name: deploy_staging
+  image: golang:1.12
+  commands:
+  - echo "deploy staging"
+  when:
+    branch: [ master ]
+    event: [ push ]
+- name: deploy
+  image: golang:1.12
+  commands:
+  - echo "deploy to production"
+  when:
+    ref:
+    - refs/tags/*-release*
